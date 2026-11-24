@@ -1,0 +1,233 @@
+---
+# Employee DB PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: employee-db-pvc
+  namespace: hrpulse
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: employee-db
+  namespace: hrpulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: employee-db
+  template:
+    metadata:
+      labels:
+        app: employee-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "hrpulse"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hrpulse-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: "employee_db"
+          volumeMounts:
+            - name: storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "hrpulse", "-d", "employee_db"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "hrpulse", "-d", "employee_db"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: employee-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: employee-db
+  namespace: hrpulse
+spec:
+  selector:
+    app: employee-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP
+---
+# Leave DB PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: leave-db-pvc
+  namespace: hrpulse
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: leave-db
+  namespace: hrpulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: leave-db
+  template:
+    metadata:
+      labels:
+        app: leave-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "hrpulse"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hrpulse-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: "leave_db"
+          volumeMounts:
+            - name: storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "hrpulse", "-d", "leave_db"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: leave-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: leave-db
+  namespace: hrpulse
+spec:
+  selector:
+    app: leave-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP
+---
+# Payroll DB PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: payroll-db-pvc
+  namespace: hrpulse
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payroll-db
+  namespace: hrpulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payroll-db
+  template:
+    metadata:
+      labels:
+        app: payroll-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "hrpulse"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hrpulse-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: "payroll_db"
+          volumeMounts:
+            - name: storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "hrpulse", "-d", "payroll_db"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: payroll-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payroll-db
+  namespace: hrpulse
+spec:
+  selector:
+    app: payroll-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP

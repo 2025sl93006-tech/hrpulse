@@ -1,0 +1,193 @@
+networks:
+  hrpulse-net:
+    driver: bridge
+
+volumes:
+  employee-db-data:
+  leave-db-data:
+  payroll-db-data:
+  mongo-data:
+  rabbitmq-data:
+
+services:
+
+  # ── Databases ──────────────────────────────────────────────────────────────
+
+  employee-db:
+    image: postgres:15-alpine
+    container_name: employee-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: employee_db
+    volumes:
+      - employee-db-data:/var/lib/postgresql/data
+    networks:
+      - hrpulse-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d employee_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  leave-db:
+    image: postgres:15-alpine
+    container_name: leave-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: leave_db
+    volumes:
+      - leave-db-data:/var/lib/postgresql/data
+    networks:
+      - hrpulse-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d leave_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  payroll-db:
+    image: postgres:15-alpine
+    container_name: payroll-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: payroll_db
+    volumes:
+      - payroll-db-data:/var/lib/postgresql/data
+    networks:
+      - hrpulse-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d payroll_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7.0
+    container_name: mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - hrpulse-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    ports:
+      - "15672:15672"  # Management UI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - hrpulse-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ── Application Services ───────────────────────────────────────────────────
+
+  employee-service:
+    build: ./services/employee-service
+    image: ${DOCKER_USERNAME:-hrpulse}/employee-service:1.0.0
+    container_name: employee-service
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@employee-db:5432/employee_db
+    ports:
+      - "8001:8001"
+    networks:
+      - hrpulse-net
+    depends_on:
+      employee-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  leave-service:
+    build: ./services/leave-service
+    image: ${DOCKER_USERNAME:-hrpulse}/leave-service:1.0.0
+    container_name: leave-service
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@leave-db:5432/leave_db
+      EMPLOYEE_SERVICE_URL: http://employee-service:8001
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+    networks:
+      - hrpulse-net
+    depends_on:
+      leave-db:
+        condition: service_healthy
+      employee-service:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  payroll-service:
+    build: ./services/payroll-service
+    image: ${DOCKER_USERNAME:-hrpulse}/payroll-service:1.0.0
+    container_name: payroll-service
+    ports:
+      - "8003:8003"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@payroll-db:5432/payroll_db
+      EMPLOYEE_SERVICE_URL: http://employee-service:8001
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+    networks:
+      - hrpulse-net
+    depends_on:
+      payroll-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  performance-service:
+    build: ./services/performance-service
+    image: ${DOCKER_USERNAME:-hrpulse}/performance-service:1.0.0
+    container_name: performance-service
+    ports:
+      - "8004:8004"
+    environment:
+      MONGO_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/performance_db?authSource=admin
+      MONGO_DB_NAME: performance_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+    networks:
+      - hrpulse-net
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # ── API Gateway (NGINX) ────────────────────────────────────────────────────
+
+  gateway:
+    image: nginx:1.25-alpine
+    container_name: gateway
+    ports:
+      - "8080:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - hrpulse-net
+    depends_on:
+      - employee-service
+      - leave-service
+      - payroll-service
+      - performance-service

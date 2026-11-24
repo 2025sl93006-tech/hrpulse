@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hrpulse-config
+  namespace: hrpulse
+data:
+  EMPLOYEE_SERVICE_URL: "http://employee-service:8001"
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+  MONGO_DB_NAME: "performance_db"
+  EMPLOYEE_DB_URL: "postgresql://hrpulse:hrpulse123@employee-db:5432/employee_db"
+  LEAVE_DB_URL: "postgresql://hrpulse:hrpulse123@leave-db:5432/leave_db"
+  PAYROLL_DB_URL: "postgresql://hrpulse:hrpulse123@payroll-db:5432/payroll_db"
+  MONGO_URL: "mongodb://hrpulse:hrpulse123@mongo:27017/performance_db?authSource=admin"

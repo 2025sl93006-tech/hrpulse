@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: performance-service
+  namespace: hrpulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: performance-service
+  template:
+    metadata:
+      labels:
+        app: performance-service
+    spec:
+      containers:
+        - name: performance-service
+          image: abhiroop37197/performance-service:1.0.0
+          ports:
+            - containerPort: 8004
+          env:
+            - name: MONGO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: hrpulse-config
+                  key: MONGO_URL
+            - name: MONGO_DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: hrpulse-config
+                  key: MONGO_DB_NAME
+            - name: RABBITMQ_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: hrpulse-config
+                  key: RABBITMQ_URL
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: performance-service
+  namespace: hrpulse
+spec:
+  selector:
+    app: performance-service
+  ports:
+    - port: 8004
+      targetPort: 8004
+  type: ClusterIP
